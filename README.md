@@ -1,3 +1,4 @@
+
 # jitsi-token-moderation-plugin
 Lua plugin for jitsi which determines whether users are moderator or not based on token contents
 
@@ -19,6 +20,29 @@ This may well break may other features relying on prosody affiliations, such as:
 - edit the conferance.[YOUR DOMAIN] component to add **token_moderation**
   - Change this line `modules_enabled = { [EXISTING MODULES] }` TO `modules_enabled = { [EXISTING MODULES]; "token_moderation" }`
 - run `prosodyctl restart && /etc/init.d/jicofo restart && /etc/init.d/jitsi-videobridge restart` in bash to restart prosody/jitsi/jicofo
+
+
+## Installation for Docker-Jitsi-Meet
+- Install [Docker-Jitsi-Meet](https://github.com/jitsi/docker-jitsi-meet) per its readme.
+- Open the `.env` file, found in the project root. Edit the `XMPP_MUC_MODULES` variable:
+```
+// Old
+XMPP_MUC_MODULES=
+
+// New
+XMPP_MUC_MODULES=token_moderation
+```
+- Open the Prosody Dockerfile: `\prosody\Dockerfile`. Add the following lines under the existing `ADD` command:
+```
+# Download the file to the Modules folder
+ADD https://raw.githubusercontent.com/BirdInTheCity/jitsi-token-moderation-plugin/master/mod_token_moderation.lua /usr/lib/prosody/modules/mod_token_moderation.lua
+
+# Ensure permissions are set correctly.
+RUN chmod 644 /usr/lib/prosody/modules/mod_token_moderation.lua
+```
+- In the command prompt, run `make`
+- In Docker Desktop, inspect the prosody container. Ensure there are no errors thrown and that the following console log is present:
+`Loaded token moderation plugin`
 
 ## Usage
 Just include a boolean field "moderator" in the body of the jwt you create for jitsi, if its true that user will be mod, if not they wont. It works irrespective of which order people join in. 
