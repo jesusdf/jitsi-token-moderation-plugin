@@ -52,8 +52,10 @@ function setupAffiliation(room, origin, stanza)
                                 -- If user is a moderator, set their affiliation to be an owner
                                 if body["moderator"] == true then
                                         room:set_affiliation("token_plugin", jid_bare(stanza.attr.from), "owner");
+					log('info', 'Moderator claim found -- Assigning mod privilages.');
                                 else
                                         room:set_affiliation("token_plugin", jid_bare(stanza.attr.from), "member");
+					log('info', 'No moderator claim found -- Assigning member status.');
                                 end;
 			end;
 		end;
