@@ -2,6 +2,7 @@
 -- this module looks for a field on incoming JWT tokens called "moderator". 
 -- If it is true the user is added to the room as a moderator, otherwise they are set to a normal user.
 -- Note this may well break other affiliation based features like banning or login-based admins
+local is_admin = require "core.usermanager".is_admin;
 local log = module._log;
 local jid_bare = require "util.jid".bare;
 local json = require "cjson";
@@ -28,9 +29,12 @@ module:hook("muc-room-created", function(event)
         -- Wrap set affilaition to block anything but token setting owner (stop pesky auto-ownering)
         local _set_affiliation = room.set_affiliation;
         room.set_affiliation = function(room, actor, jid, affiliation, reason)
+				if(is_admin(actor)) then
+					return _set_affiliation(room, actor, jid, affiliation, reason);
+				end;
                 -- let this plugin do whatever it wants
                 if actor == "token_plugin" then
-                        return _set_affiliation(room, true, jid, affiliation, reason)
+                        return _set_affiliation(room, true, jid, affiliation, reason);
                 -- noone else can assign owner (in order to block prosody/jisti's built in moderation functionality
                 elseif affiliation == "owner" then
                         return nil, "modify", "not-acceptable"
@@ -52,10 +56,8 @@ function setupAffiliation(room, origin, stanza)
                                 -- If user is a moderator, set their affiliation to be an owner
                                 if body["moderator"] == true then
                                         room:set_affiliation("token_plugin", jid_bare(stanza.attr.from), "owner");
-					log('info', 'Moderator claim found -- Assigning mod privilages.');
                                 else
                                         room:set_affiliation("token_plugin", jid_bare(stanza.attr.from), "member");
-					log('info', 'No moderator claim found -- Assigning member status.');
                                 end;
 			end;
 		end;

@@ -35,7 +35,7 @@ XMPP_MUC_MODULES=token_moderation
 - Open the Prosody Dockerfile: `\prosody\Dockerfile`. Add the following lines under the existing `ADD` command:
 ```
 # Download the file to the Modules folder
-ADD https://raw.githubusercontent.com/BirdInTheCity/jitsi-token-moderation-plugin/master/mod_token_moderation.lua /usr/lib/prosody/modules/mod_token_moderation.lua
+ADD https://raw.githubusercontent.com/jesusdf/jitsi-token-moderation-plugin/master/mod_token_moderation.lua /usr/lib/prosody/modules/mod_token_moderation.lua
 
 # Ensure permissions are set correctly.
 RUN chmod 644 /usr/lib/prosody/modules/mod_token_moderation.lua
