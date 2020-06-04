@@ -37,13 +37,14 @@ function extractBodyFromToken(auth_token)
 	return nil;
 end;
 
-local function send_notification(post_url, nick, email, room, action, token)
+local function send_notification(post_url, id, nick, email, room, action, token)
 	http.request(post_url, {
 		insecure = true;
 		headers = {
 				["Content-Type"] = "application/json";
 		};
 		body = json.encode {
+				_id = id;
 				_nick = nick;
 				_email = email;
 				_room = room;
@@ -78,9 +79,11 @@ function occupantJoin(event)
 	local nick = nil;
 	local email = nil;
 	local role = nil;
+	local id = nil;
 	if session then
 		local body = extractBodyFromToken(session.auth_token);
 		if body then
+			id = body["sub"];
 			nick = body["context"]["user"]["name"];
 			email = body["context"]["user"]["email"];
 		end;
@@ -91,7 +94,7 @@ function occupantJoin(event)
 	if nick and email then
 		module:log("info", "%s <%s> joined the room %s as %s.", nick, email, room_name, role);
 		if (notification_url) then
-			send_notification(notification_url, nick, email, room_name, "join", session.auth_token);
+			send_notification(notification_url, id, nick, email, room_name, "join", session.auth_token);
 		end;
 	end;
 end;
@@ -107,9 +110,11 @@ function occupantLeft(event)
 	local nick = nil;
 	local email = nil;
 	local role = nil;
+	local id = nil;
 	if session then
 		local body = extractBodyFromToken(session.auth_token);
 		if body then
+			id = body["sub"];
 			nick = body["context"]["user"]["name"];
 			email = body["context"]["user"]["email"];
 		end;
@@ -117,7 +122,7 @@ function occupantLeft(event)
 	if nick and email then
 		module:log("info", "%s <%s> left the room %s.", nick, email, room_name);
 		if (notification_url) then
-			send_notification(notification_url, nick, email, room_name, "leave", session.auth_token);
+			send_notification(notification_url, id, nick, email, room_name, "leave", session.auth_token);
 		end;
 	end;
 end;
