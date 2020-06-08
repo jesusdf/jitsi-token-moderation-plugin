@@ -78,6 +78,7 @@ It will post a JSON with this format:
 
 ```javascript
 {
+	"_id": "",
 	"_nick": "",
 	"_email": "",
 	"_room": "",
