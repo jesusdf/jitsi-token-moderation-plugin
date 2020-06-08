@@ -15,6 +15,8 @@ local mod_muc = module:depends("muc");
 module:log("info", "Loading token moderation plugin...");
 
 local notification_url = module:get_option_string("muc_room_notification_url", nil);
+local notification_user = module:get_option_string("muc_room_notification_user", nil);
+local notification_pass = module:get_option_string("muc_room_notification_pass", nil);
 
 if (notification_url) then
 	module:log("info", "Push notifications to %s are enabled.", notification_url);
@@ -37,12 +39,21 @@ function extractBodyFromToken(auth_token)
 	return nil;
 end;
 
-local function send_notification(post_url, id, nick, email, room, action, token)
+local function send_notification(post_url, post_user, post_pass, id, nick, email, room, action, token)
+	local post_headers = nil;
+	if (post_user) then
+		post_headers = {
+				["Content-Type"] = "application/json",
+				["Authorization"] = "Basic " .. basexx.to_base64(post_user .. ":" .. post_pass)
+		};
+	else
+		post_headers = {
+				["Content-Type"] = "application/json"
+		};
+	end;
 	http.request(post_url, {
 		insecure = true;
-		headers = {
-				["Content-Type"] = "application/json";
-		};
+		headers = post_headers;
 		body = json.encode {
 				_id = id;
 				_nick = nick;
@@ -94,7 +105,7 @@ function occupantJoin(event)
 	if nick and email then
 		module:log("info", "%s <%s> joined the room %s as %s.", nick, email, room_name, role);
 		if (notification_url) then
-			send_notification(notification_url, id, nick, email, room_name, "join", session.auth_token);
+			send_notification(notification_url, notification_user, notification_pass, id, nick, email, room_name, "join", session.auth_token);
 		end;
 	end;
 end;
@@ -122,7 +133,7 @@ function occupantLeft(event)
 	if nick and email then
 		module:log("info", "%s <%s> left the room %s.", nick, email, room_name);
 		if (notification_url) then
-			send_notification(notification_url, id, nick, email, room_name, "leave", session.auth_token);
+			send_notification(notification_url, notification_user, notification_pass, id, nick, email, room_name, "leave", session.auth_token);
 		end;
 	end;
 end;

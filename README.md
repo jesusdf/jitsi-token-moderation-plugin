@@ -68,7 +68,11 @@ Component "muc.meet.jitsi" "muc"
     muc_room_locking = false
     muc_room_default_public_jids = true
     muc_room_notification_url = "https://mydomain/api/push"
+	muc_room_notification_user = "myuser"
+	muc_room_notification_pass = "mypass"
 ```
+
+You can also specify an user and password to use with HTTP Basic Authorization, or leave it blank to make a post without authentication at all.
 
 It will post a JSON with this format:
 
