@@ -72,7 +72,7 @@ Component "muc.meet.jitsi" "muc"
 	muc_room_notification_pass = "mypass"
 ```
 
-You can also specify an user and password to use with HTTP Basic Auth, or leave it blank to make a post without authentication at all.
+You can also specify a user and password to use with HTTP Basic Auth, or leave it blank to make a post without authentication at all.
 
 It will post a JSON with this format:
 
@@ -86,6 +86,8 @@ It will post a JSON with this format:
 	"_token": ""
 }
 ```
+
+The field "_id" contains the "sub" token value.
 
 ## License
 MIT License
