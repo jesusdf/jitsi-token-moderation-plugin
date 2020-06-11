@@ -105,7 +105,7 @@ function occupantJoin(event)
 	if nick and email then
 		module:log("info", "%s <%s> joined the room %s as %s.", nick, email, room_name, role);
 		if (notification_url) then
-			send_notification(notification_url, notification_user, notification_pass, id, nick, email, room_name, "join", session.auth_token);
+			send_notification(notification_url, notification_user, notification_pass, id, nick, email, room_name, "enter", session.auth_token);
 		end;
 	end;
 end;

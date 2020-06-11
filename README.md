@@ -88,6 +88,7 @@ It will post a JSON with this format:
 ```
 
 The field "_id" contains the "sub" token value.
+The field "_action" contains either "enter" or "leave".
 
 ## License
 MIT License
