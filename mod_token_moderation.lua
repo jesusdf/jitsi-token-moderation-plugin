@@ -7,6 +7,11 @@ local jid_bare = require "util.jid".bare;
 local http = require "net.http";
 local json = require "cjson";
 local basexx = require "basexx";
+local um_is_admin = require "core.usermanager".is_admin;
+
+local function is_admin(jid)
+        return um_is_admin(jid, module.host);
+end
 
 -- This is a plugin for the MUC module.
 local mod_muc = module:depends("muc");
@@ -70,11 +75,12 @@ end;
 function setupAffiliation(room, origin, stanza)
 	local body = extractBodyFromToken(origin.auth_token)
 	if body then
-		-- If user is a moderator, set their affiliation to be an owner
-		if body["moderator"] == true then
-			room:set_affiliation("token_plugin", jid_bare(stanza.attr.from), "owner");
+		local jid = jid_bare(stanza.attr.from);
+		-- If user is a moderator or an admin, set their affiliation to be an owner
+		if body["moderator"] == true or is_admin(jid) then
+				room:set_affiliation("token_plugin", jid, "owner");
 		else
-			room:set_affiliation("token_plugin", jid_bare(stanza.attr.from), "member");
+				room:set_affiliation("token_plugin", jid, "member");
 		end;
 	end;
 end;
