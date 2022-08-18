@@ -4,6 +4,7 @@
 local is_admin = require "core.usermanager".is_admin;
 local jid_split = require "util.jid".split;
 local jid_bare = require "util.jid".bare;
+local timer = require 'util.timer';
 local http = require "net.http";
 local json = require "cjson";
 local basexx = require "basexx";
@@ -16,18 +17,54 @@ end
 -- This is a plugin for the MUC module.
 local mod_muc = module:depends("muc");
 
+local host = module.host;
+local parentHostName = string.gmatch(tostring(host), "%w+.(%w.+)")();
+if parentHostName == nil then
+	log("error", "Failed to start - unable to get parent hostname");
+	return;
+end
+
+local parentCtx = module:context(parentHostName);
+if parentCtx == nil then
+	log("error",
+		"Failed to start - unable to get parent context for host: %s",
+		tostring(parentHostName));
+	return;
+end
+
+local token_util = module:require "token/util".new(parentCtx);
+
+-- no token configuration
+if token_util == nil then
+    return;
+end
+
 -- log() shows logs as "general". module:log() shows it as the MUC module.
 module:log("info", "Loading token moderation plugin...");
 
-local notification_url = module:get_option_string("muc_room_notification_url", nil);
-local notification_user = module:get_option_string("muc_room_notification_user", nil);
-local notification_pass = module:get_option_string("muc_room_notification_pass", nil);
+local notification_url;
+local notification_useragent;
+local notification_user;
+local notification_pass;
+local notification_timeout;
+local notification_retry_count;
+local notification_retry_delay;
 
-if (notification_url) then
-	module:log("info", "Push notifications to %s are enabled.", notification_url);
-else
-	module:log("info", "Missing configuration parameter: muc_room_notification_url. Push notifications are disabled.");
-end;
+local function load_config()
+    notification_url = module:get_option_string("muc_room_notification_url", nil);
+	notification_useragent = module:get_option_string("muc_room_notification_useragent", nil);
+	notification_user = module:get_option_string("muc_room_notification_user", nil);
+	notification_pass = module:get_option_string("muc_room_notification_pass", nil);
+	notification_timeout = module:get_option("muc_room_notification_timeout", 10);
+	notification_retry_count = module:get_option("muc_room_notification_retry_count", 5);
+	notification_retry_delay = module:get_option("muc_room_notification_retry_delay", 1);
+	if (notification_url) then
+		module:log("info", "Push notifications to %s are enabled.", notification_url);
+	else
+		module:log("info", "Missing configuration parameter: muc_room_notification_url. Push notifications are disabled.");
+	end;
+end
+load_config();
 
 function extractBodyFromToken(auth_token)
 	if auth_token then
@@ -44,19 +81,71 @@ function extractBodyFromToken(auth_token)
 	return nil;
 end;
 
-local function send_notification(post_url, post_user, post_pass, id, nick, email, room, action, token)
-	local post_headers = nil;
-	if (post_user) then
-		post_headers = {
-				["Content-Type"] = "application/json",
-				["Authorization"] = "Basic " .. basexx.to_base64(post_user .. ":" .. post_pass)
-		};
-	else
-		post_headers = {
-				["Content-Type"] = "application/json"
-		};
+-- https://github.com/jitsi-contrib/prosody-plugins/blob/main/event_sync/mod_event_sync_component.lua
+
+-- Option for user to control HTTP response codes that will result in a retry.
+-- Defaults to returning true on any 5XX code or 0
+local notification_should_retry_for_code = module:get_option("notification_should_retry_for_code", function (code)
+	return code >= 500;
+ end)
+
+--- Start non-blocking HTTP call
+-- @param url URL to call
+-- @param options options table as expected by net.http where we provide optional headers, body or method.
+-- @param callback if provided, called with callback(response_body, response_code) when call complete.
+-- @param timeout_callback if provided, called without args when request times out.
+-- @param retries how many times to retry on failure; 0 means no retries.
+local function async_http_request(url, options, callback, timeout_callback, retries)
+    local completed = false;
+    local timed_out = false;
+    local retries = retries or notification_retry_count;
+
+    local function cb_(response_body, response_code)
+        if not timed_out then  -- request completed before timeout
+            completed = true;
+            if (response_code == 0 or notification_should_retry_for_code(response_code)) and retries > 0 then
+                module:log("warn", "Push notification response code %d. Will retry after %ds", response_code, notification_retry_delay);
+                timer.add_task(notification_retry_delay, function()
+                    async_http_request(url, options, callback, timeout_callback, retries - 1)
+                end)
+                return;
+            end
+
+            module:log("debug", "%s %s returned code %s", options.method, url, response_code);
+
+            if callback then
+                callback(response_body, response_code);
+            end;
+        end;
+    end;
+
+    local request = http.request(url, options, cb_);
+
+    timer.add_task(notification_timeout, function ()
+        timed_out = true;
+
+        if not completed then
+            http.destroy_request(request);
+            if timeout_callback then
+                timeout_callback();
+            end;
+        end;
+    end);
+
+end;
+
+local function send_notification(post_url, post_useragent, post_user, post_pass, id, nick, email, room, action, token)
+	local post_headers = {};
+	if (post_useragent) then
+		post_headers["User-Agent"] = post_useragent;
 	end;
-	http.request(post_url, {
+	if (post_user) then
+		post_headers["Authorization"] = "Basic " .. basexx.to_base64(post_user .. ":" .. post_pass);
+	end;
+	post_headers["Content-Type"] = "application/json";
+
+	async_http_request(post_url, {
+		method = "POST";
 		insecure = true;
 		headers = post_headers;
 		body = json.encode {
@@ -86,37 +175,14 @@ function setupAffiliation(room, origin, stanza)
 end;
 
 function occupantJoin(event)
-	local session = event.origin;
-	-- local stanza = event.stanza;
-	-- local session = prosody.full_sessions[stanza.attr.from];
-	local room = event.room;
-	local room_name = jid_split(event.nick);
-	-- local room_name = session.jitsi_meet_room;
-	local occupant = event.occupant;
-	local nick = nil;
-	local email = nil;
-	local role = nil;
-	local id = nil;
-	if session then
-		local body = extractBodyFromToken(session.auth_token);
-		if body then
-			id = body["sub"];
-			nick = body["context"]["user"]["name"];
-			email = body["context"]["user"]["email"];
-		end;
-	end;
-	if occupant then
-		role = occupant.role;
-	end;
-	if nick and email then
-		module:log("info", "%s <%s> joined the room %s as %s.", nick, email, room_name, role);
-		if (notification_url) then
-			send_notification(notification_url, notification_user, notification_pass, id, nick, email, room_name, "enter", session.auth_token);
-		end;
-	end;
+	occupantAction(event, "enter");
 end;
 
 function occupantLeft(event)
+	occupantAction(event, "leave");
+end;
+
+function occupantAction(event, action_name)
 	local session = event.origin;
 	-- local stanza = event.stanza;
 	-- local session = prosody.full_sessions[stanza.attr.from];
@@ -131,15 +197,15 @@ function occupantLeft(event)
 	if session then
 		local body = extractBodyFromToken(session.auth_token);
 		if body then
-			id = body["sub"];
+			id = body["contextid"];
 			nick = body["context"]["user"]["name"];
 			email = body["context"]["user"]["email"];
 		end;
 	end;
 	if nick and email then
-		module:log("info", "%s <%s> left the room %s.", nick, email, room_name);
+		module:log("info", "%s <%s> %s the room %s.", nick, email, action_name, room_name);
 		if (notification_url) then
-			send_notification(notification_url, notification_user, notification_pass, id, nick, email, room_name, "leave", session.auth_token);
+			send_notification(notification_url, notification_useragent, notification_user, notification_pass, id, nick, email, room_name, action_name, session.auth_token);
 		end;
 	end;
 end;
@@ -164,9 +230,6 @@ function roomCreated(event)
 	-- Wrap set affiliation to block anything but token setting owner (stop pesky auto-ownering)
 	local _set_affiliation = room.set_affiliation;
 	room.set_affiliation = function(room, actor, jid, affiliation, reason)
-		if(is_admin(actor)) then
-			return _set_affiliation(room, actor, jid, affiliation, reason);
-		end;
 		-- This plugin has super powers
 		if actor == "token_plugin" then
 			return _set_affiliation(room, true, jid, affiliation, reason);
@@ -183,5 +246,7 @@ end;
 module:hook("muc-room-created", roomCreated);
 module:hook("muc-occupant-left", occupantLeft);
 module:hook("muc-occupant-joined", occupantJoin);
+
+module:hook_global('config-reloaded', load_config);
 
 module:log("info", "Initialization completed.");
