@@ -36,7 +36,7 @@ RUN chmod 644 /usr/lib/prosody/modules/mod_token_moderation.lua
 `Loaded token moderation plugin`
 
 ## Usage
-Include a boolean field "moderator" in the body of the jwt you create for jitsi, if its true that user will be mod, if not they wont. It works irrespective of which order people join in. 
+Include a boolean "moderator" field in the body of the JWT you create for Jitsi. If true, the user will be a moderator; if not, they won't. This works regardless of the order in which people join.
 
 Token body should look something like this:
 ```javascript
