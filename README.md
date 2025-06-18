@@ -3,6 +3,9 @@
 Lua plugin for jitsi which determines whether users are moderator or not based on token contents.
 It also supports sending a push notification when a user joins or leaves a room.
 
+## TODO
+- Usage of legacy is_admin() API, which will be disabled in a future build. See https://prosody.im/doc/developers/permissions about the new permissions API.
+
 ## Installation
 - Put the lua file somewhere on your jitsi server`
 - Open `/etc/prosody/conf.d/[YOUR DOMAIN].cfg.lua`
